@@ -137,6 +137,7 @@ def track_obj(img, T, T_bb, p, cnt, bb):
 		p = p + delta_p
 		count = count + 1
 		if np.linalg.norm(delta_p) < 0.01:
+			print('Found at ', count)
 			break
 	if count == 500:
 		print("Oh no!! Couldn't track object!!!! Tragedy!!!!!!")
@@ -160,7 +161,7 @@ def track_obj(img, T, T_bb, p, cnt, bb):
 		# if cv2.waitKey(0) & 0xff == 27:
 		# 	cv2.destroyAllWindows()
 
-	cv2.imwrite('Warped/frame' + str(cnt) + '.png', I)
+	cv2.imwrite('Warped_bolt/frame' + str(cnt) + '.png', I)
 
 	print(np.linalg.norm(delta_p))
 	print("e: ", e)
@@ -214,8 +215,8 @@ def main():
 	# cv2.imshow("template", T)
 	# if cv2.waitKey(0) & 0xff == 27:
 	# 	cv2.destroyAllWindows()
-	T = images[160]
-	T_bb = [61, 104, 125, 186]
+	T = images[0]
+	# T_bb = [61, 104, 125, 186]
 
 	count = 0
 
@@ -223,14 +224,13 @@ def main():
 	p = np.asarray([0, 0, 0, 0, 0, 0])
 	p = np.reshape(p, (6,1))
 	bb = T_bb
-	for i in range(161, len(images)):
+	for i in range(len(images)):
 		# if count == 0:
 		# 	count = count + 1
 		# 	continue
-		print(bb)
 		bb, p = track_obj(images[i], T, T_bb, p, i+1, bb)
 		im = cv2.rectangle(images[i], (bb[1], bb[0]), (bb[3], bb[2]), color=(255,0,0), thickness=2)
-		cv2.imwrite('Output/frame' + str(i+1) + '.png', im)
+		cv2.imwrite('Output_bolt/frame' + str(i+1) + '.png', im)
 		# count = count + 1
 		# if count == 5:
 			# break
