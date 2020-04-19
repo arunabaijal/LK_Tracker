@@ -1,5 +1,6 @@
 import os
 import cv2
+import math
 import argparse
 import numpy as np
 from copy import deepcopy
@@ -46,6 +47,7 @@ def traks_obj_util(img, T, p, bb):
 	W = get_W(p)
 	# img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 	# T = cv2.cvtColor(T, cv2.COLOR_BGR2GRAY)
+	W = cv2.invertAffineTransform(W)
 
 	I = cv2.warpAffine(img, W, (img.shape[1], img.shape[0]))
 	
@@ -91,21 +93,22 @@ def traks_obj_util(img, T, p, bb):
 			sd = np.matmul(grad, del_W)
 			sd = np.reshape(sd, (1,6)).T
 
-			# e = T[y, x] - I[y, x]
-			e = I[y, x] - T[y, x]
+			e = T[y, x] - I[y, x]
+			# e = I[y, x] - T[y, x]
 			temp = temp + e*sd
 
 	delta_p = np.matmul(H_inv, temp)
 
-	# e = 0
-	# for y in range(bb[0], bb[2], 1):
-	# 	for x in range(bb[1], bb[3], 1):
-	# 		e = e + T[y, x] - I[y, x]
+	e = 0
+	for y in range(bb[0], bb[2], 1):
+		for x in range(bb[1], bb[3], 1):
+			# e = e + T[y, x] - I[y, x]
+			e = e + (I[y, x] - T[y, x])**2
 
-	# print("e: ", e)
-	# print("delta_p: ", np.linalg.norm(delta_p))
+	# print("e: ", math.sqrt(e))
+	# print("delta_p: ", delta_p)
 
-	return delta_p, I
+	return delta_p, I, math.sqrt(e)
 
 def track_obj(img, T, T_bb, p, cnt, bb):
 	# img_hist = cv2.cvtColor(img_hist, cv2.COLOR_BGR2GRAY)
@@ -130,11 +133,10 @@ def track_obj(img, T, T_bb, p, cnt, bb):
 
 	while count < 500:
 		# img_copy = deepcopy(img)
-		delta_p, I = traks_obj_util(img, T, p, T_bb)
+		delta_p, I, e = traks_obj_util(img, T, p, T_bb)
 		p = p + delta_p
 		count = count + 1
-		if np.linalg.norm(delta_p) < 0.05:
-			print('Found at ', count)
+		if np.linalg.norm(delta_p) < 0.01:
 			break
 	if count == 500:
 		print("Oh no!! Couldn't track object!!!! Tragedy!!!!!!")
@@ -161,8 +163,9 @@ def track_obj(img, T, T_bb, p, cnt, bb):
 	cv2.imwrite('Warped/frame' + str(cnt) + '.png', I)
 
 	print(np.linalg.norm(delta_p))
-	W = get_W(p)
-	W_inv = cv2.invertAffineTransform(W)
+	print("e: ", e)
+	W_inv = get_W(p)
+	
 
 	# bb = np.zeros((1, 4))
 	T1 = np.asarray([T_bb[1], T_bb[0], 1])
@@ -182,10 +185,13 @@ def main():
 
 	if test_video == 1:
 		rel_path = "Car4/img"
+		T_bb = [51, 70, 138, 177]
 	elif test_video == 2:
 		rel_path = "Bolt2/img"
+		T_bb = [75, 269, 139, 303]
 	elif test_video == 3:
 		rel_path = "DragonBaby/img"
+		T_bb = [83, 160, 148, 216]
 	else:
 		print("Input should be between 1-3. Can you count??")
 		exit()
@@ -202,6 +208,7 @@ def main():
 
 	images = np.asarray(images)
 	
+	# print(len(images))
 
 	# T = images[0][51:138, 70:177, :]
 	# cv2.imshow("template", T)
@@ -226,7 +233,7 @@ def main():
 		cv2.imwrite('Output/frame' + str(i+1) + '.png', im)
 		# count = count + 1
 		# if count == 5:
-		# 	break
+			# break
 
 	# res = display_groundtruth(images, gt_path, test_video)
 
