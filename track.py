@@ -44,13 +44,13 @@ def get_Winv(p):
 
 def traks_obj_util(img, T, p, bb):
 	W = get_W(p)
-	img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-	T = cv2.cvtColor(T, cv2.COLOR_BGR2GRAY)
+	# img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+	# T = cv2.cvtColor(T, cv2.COLOR_BGR2GRAY)
 
 	I = cv2.warpAffine(img, W, (img.shape[1], img.shape[0]))
 	
-	
-	# cv2.imshow("warped", I)
+	# cv2.imshow("warped", im)
+	# cv2.waitKey(0)
 	# if cv2.waitKey(0) & 0xff == 27:
 	# 	cv2.destroyAllWindows()
 	# cv2.imshow("template", T)
@@ -107,12 +107,26 @@ def traks_obj_util(img, T, p, bb):
 
 	return delta_p, I
 
-def track_obj(img, T, T_bb, p, cnt):
-
+def track_obj(img, T, T_bb, p, cnt, bb):
+	# img_hist = cv2.cvtColor(img_hist, cv2.COLOR_BGR2GRAY)
+	img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+	T = cv2.cvtColor(T, cv2.COLOR_BGR2GRAY)
+	img_hist = deepcopy(img)
+	img_hist = np.asarray(img_hist, dtype='uint8')
+	crop_img = img_hist[bb[0]-10:bb[2]+10, bb[1]-10:bb[3]+10]
+	img_hist = cv2.equalizeHist(crop_img)
+	# cv2.imshow("cropped histogram", img_hist)
+	# cv2.waitKey(0)
+	# for i in range(bb[0],bb[2]):
+	# 	for j in range(bb[1],bb[3]):
+	# 		img[i][j] = img_hist[i][j]
+	img[bb[0]-10:bb[2]+10, bb[1]-10:bb[3]+10] = img_hist
+	# cv2.imshow("full image histogram", img)
+	# cv2.waitKey(0)
 	img = np.asarray(img, dtype='float32')
 	T = np.asarray(T, dtype='float32')
-
 	count = 0
+	p_orig = p
 
 	while count < 500:
 		# img_copy = deepcopy(img)
@@ -120,8 +134,11 @@ def track_obj(img, T, T_bb, p, cnt):
 		p = p + delta_p
 		count = count + 1
 		if np.linalg.norm(delta_p) < 0.05:
+			print('Found at ', count)
 			break
-
+	if count == 500:
+		print("Oh no!! Couldn't track object!!!! Tragedy!!!!!!")
+		p = p_orig
 		# W_inv1 = get_Winv(p)
 		# print(W_inv1)
 		# W = get_W(p)
@@ -153,8 +170,7 @@ def track_obj(img, T, T_bb, p, cnt):
 
 	x1, y1 = np.matmul(W_inv, np.reshape(T1, (3,1)))
 	x2, y2 = np.matmul(W_inv, np.reshape(T2, (3,1)))
-
-	return np.asarray([x1, y1, x2, y2]), p
+	return np.asarray([int(y1), int(x1), int(y2), int(x2)]), p
 
 
 def main():
@@ -191,23 +207,24 @@ def main():
 	# cv2.imshow("template", T)
 	# if cv2.waitKey(0) & 0xff == 27:
 	# 	cv2.destroyAllWindows()
-	T = images[0]
-	T_bb = [51, 70, 138, 177]
+	T = images[160]
+	T_bb = [61, 104, 125, 186]
 
 	count = 0
 
 	# initialize P
 	p = np.asarray([0, 0, 0, 0, 0, 0])
 	p = np.reshape(p, (6,1))
-
-	for i in range(len(images)):
-		if count == 0:
-			count = count + 1
-			continue
-		bb, p = track_obj(images[i], T, T_bb, p, count)
-		im = cv2.rectangle(images[i], (bb[0], bb[1]), (bb[2], bb[3]), color=(255,0,0), thickness=2)
-		cv2.imwrite('Output/frame' + str(count) + '.png', im)
-		count = count + 1
+	bb = T_bb
+	for i in range(161, len(images)):
+		# if count == 0:
+		# 	count = count + 1
+		# 	continue
+		print(bb)
+		bb, p = track_obj(images[i], T, T_bb, p, i+1, bb)
+		im = cv2.rectangle(images[i], (bb[1], bb[0]), (bb[3], bb[2]), color=(255,0,0), thickness=2)
+		cv2.imwrite('Output/frame' + str(i+1) + '.png', im)
+		# count = count + 1
 		# if count == 5:
 		# 	break
 
