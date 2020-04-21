@@ -310,9 +310,21 @@ def checkP(p):
 	return False
 
 def track_obj(img, T, T_bb, p, cnt, bb):
+	# img_hist = cv2.cvtColor(img_hist, cv2.COLOR_BGR2GRAY)
 	img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 	T = cv2.cvtColor(T, cv2.COLOR_BGR2GRAY)
-
+	# img_hist = deepcopy(img)
+	# img_hist = np.asarray(img_hist, dtype='uint8')
+	# crop_img = img_hist[bb[0]-10:bb[2]+10, bb[1]-10:bb[3]+10]
+	# img_hist = cv2.equalizeHist(crop_img)
+	# # cv2.imshow("cropped histogram", img_hist)
+	# # cv2.waitKey(0)
+	# # for i in range(bb[0],bb[2]):
+	# # 	for j in range(bb[1],bb[3]):
+	# # 		img[i][j] = img_hist[i][j]
+	# img[bb[0]-10:bb[2]+10, bb[1]-10:bb[3]+10] = img_hist
+	# cv2.imshow("full image histogram", img)
+	# cv2.waitKey(0)
 	img = np.asarray(img, dtype='float32')
 	T = np.asarray(T, dtype='float32')
 	count = 0
@@ -324,15 +336,25 @@ def track_obj(img, T, T_bb, p, cnt, bb):
 		delta_p, I, e = traks_obj_util(img, T, p, T_bb)
 		p = p + delta_p
 		count = count + 1
-
 		if np.linalg.norm(delta_p) < 0.0001:
 			print('Found at ', count)
 			break
-
 	if checkP(p):
-		print("Wrong estimate of P")
-		print("---------p-----------: ", p)
+		# print("Wrong estimate of P")
+		# print("---------p-----------: ", p)
 		p = p_orig
+
+	print(np.linalg.norm(delta_p))
+	print("e: ", e)
+	W_inv = get_W(p)
+
+	# bb = np.zeros((1, 4))
+	T1 = np.asarray([T_bb[1], T_bb[0], 1])
+	T2 = np.asarray([T_bb[3], T_bb[2], 1])
+
+	x1, y1 = np.matmul(W_inv, np.reshape(T1, (3,1)))
+	x2, y2 = np.matmul(W_inv, np.reshape(T2, (3,1)))
+	return np.asarray([int(y1), int(x1), int(y2), int(x2)]), p
 
 def track_obj_car(img, T, T_bb, p, cnt, bb):
 	img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -445,6 +467,8 @@ def main():
 		images.append(im)
 
 	images = np.asarray(images)
+
+	print(len(images))
 	
 	if test_video ==3:
 
@@ -532,6 +556,7 @@ def main():
 
 		for i in range(len(images)):
 			# print("norm of p",np.linalg.norm(p))
+			print(images[i].shape)
 			bb, p = track_obj(images[i], T, T_bb, p, i+1, bb)
 			img = cv2.rectangle(images[i], (bb[1], bb[0]), (bb[3], bb[2]), color=(255,0,0), thickness=2)
 			
