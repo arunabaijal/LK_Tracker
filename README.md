@@ -2,13 +2,13 @@
 Implementation of the Lucas-Kanade (LK) template tracker
 
 ## System Requiremnets
-`python3`<br>
-`OpenCV (4.2.0)` <br>
+`python3`
+`OpenCV (4.2.0)` 
 
 ## Run instructions
 Download the three datasets to the folder containing track.py. Navigate to that fodler and run<br>
 ```
-python3 track.py --test_video 1 <br>
+python3 track.py --test_video 1 
 ```
 
 For car dataset, give test_video argument as 1. For bolt dataset, give test_video argument as 2. For DragonBaby dataset, give test_video argument as 3. The default value is 1. 
