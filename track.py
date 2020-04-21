@@ -1,10 +1,11 @@
 import os
+import sys
 import cv2
 import math
 import argparse
 import numpy as np
 from copy import deepcopy
-import sys
+import matplotlib.pyplot as plt
 
 
 def shift_data(tmp_mean, img):
@@ -28,6 +29,7 @@ def display_groundtruth(images, gt_path, test_video):
 	f = open(gt_path, "r")
 	result = []
 
+	cnt = 1
 	for im in images:
 		bb = f.readline()
 		if test_video == 1:
@@ -37,6 +39,7 @@ def display_groundtruth(images, gt_path, test_video):
 		bb = np.asarray(bb, dtype=int)
 		im = cv2.rectangle(im, (bb[0], bb[1]), (bb[2]+bb[0], bb[3]+bb[1]), color=(0,0,255), thickness=2)
 		result.append(im)
+		cnt = cnt + 1
 
 	result = np.asarray(result)
 
@@ -48,23 +51,23 @@ def get_W(p):
 
 	return W
 
-def get_Winv(p):
-	W_inv = np.zeros((2,3))
+# def get_Winv(p):
+# 	W_inv = np.zeros((2,3))
 
-	W_inv[0][0] = p[1][0]
-	W_inv[0][1] = -(1 + p[0][0])
-	W_inv[0][2] = (1 + p[0][0])*p[5][0] - p[1][0]*p[4][0]
-	W_inv[1][0] = -(1 + p[3][0])
-	W_inv[1][1] = p[2][0]
-	W_inv[1][2] = (1 + p[3][0])*p[4][0] - p[2][0]*p[5][0]
+# 	W_inv[0][0] = p[1][0]
+# 	W_inv[0][1] = -(1 + p[0][0])
+# 	W_inv[0][2] = (1 + p[0][0])*p[5][0] - p[1][0]*p[4][0]
+# 	W_inv[1][0] = -(1 + p[3][0])
+# 	W_inv[1][1] = p[2][0]
+# 	W_inv[1][2] = (1 + p[3][0])*p[4][0] - p[2][0]*p[5][0]
 
 
-	return W_inv
+# 	return W_inv
 
 def traks_obj_util(img, T, p, bb):
 	W = get_W(p)
-	img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-	T = cv2.cvtColor(T, cv2.COLOR_BGR2GRAY)
+	# img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+	# T = cv2.cvtColor(T, cv2.COLOR_BGR2GRAY)
 	W = cv2.invertAffineTransform(W)
 
 	I = cv2.warpAffine(img, W, (img.shape[1], img.shape[0]))
@@ -300,6 +303,37 @@ def track_obj_dragon(img, T_front, T_bb_front, T_side, T_bb_side, T_back, T_bb_b
 	return np.asarray([int(y1), int(x1), int(y2), int(x2)]), p_front, p_side, p_back
 
 
+def checkP(p):
+	if abs(p[0][0]) > 0.9 or abs(p[1][0]) > 0.9 or abs(p[2][0]) > 0.9 or abs(p[3][0]) > 0.9:
+		return True
+
+	return False
+
+def track_obj(img, T, T_bb, p, cnt, bb):
+	img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+	T = cv2.cvtColor(T, cv2.COLOR_BGR2GRAY)
+
+	img = np.asarray(img, dtype='float32')
+	T = np.asarray(T, dtype='float32')
+	count = 0
+	p_orig = p
+
+	while count < 1000:
+		# img_copy = deepcopy(img)
+		p_last = p
+		delta_p, I, e = traks_obj_util(img, T, p, T_bb)
+		p = p + delta_p
+		count = count + 1
+
+		if np.linalg.norm(delta_p) < 0.0001:
+			print('Found at ', count)
+			break
+
+	if checkP(p):
+		print("Wrong estimate of P")
+		print("---------p-----------: ", p)
+		p = p_orig
+
 def track_obj_car(img, T, T_bb, p, cnt, bb):
 	img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 	T = cv2.cvtColor(T, cv2.COLOR_BGR2GRAY)
@@ -317,6 +351,7 @@ def track_obj_car(img, T, T_bb, p, cnt, bb):
 
 	while count < 500:
 		# img_copy = deepcopy(img)
+		p_last = p
 		delta_p, I, e = traks_obj_util(img, T, p, T_bb)
 		p = p + delta_p
 		count = count + 1
@@ -329,6 +364,7 @@ def track_obj_car(img, T, T_bb, p, cnt, bb):
 	if count == 500:
 		print("Oh no!! Couldn't track object!!!! Tragedy!!!!!!")
 		p = p_orig
+
 
 	# cv2.imwrite('Warped_car/frame' + str(cnt) + '.png', I)
 
@@ -367,9 +403,19 @@ def generate_video(gt_path,test_video,output_path,vid_path):
 		# 	break
 	vidWriter.release()
 
+def get_bb(p, T_bb):
+	W_inv = get_W(p)
+	# bb = np.zeros((1, 4))
+	T1 = np.asarray([T_bb[1], T_bb[0], 1])
+	T2 = np.asarray([T_bb[3], T_bb[2], 1])
+
+	x1, y1 = np.matmul(W_inv, np.reshape(T1, (3,1)))
+	x2, y2 = np.matmul(W_inv, np.reshape(T2, (3,1)))
+	return np.asarray([int(y1), int(x1), int(y2), int(x2)])
+
 def main():
 	Parser = argparse.ArgumentParser()
-	Parser.add_argument('--test_video', type=int, default = 3, help = 'Choose the inut test video. (1: Car4, 2: Bolt2, 3: DragonBaby) Default value:1')
+	Parser.add_argument('--test_video', type=int, default = 1, help = 'Choose the inut test video. (1: Car4, 2: Bolt2, 3: DragonBaby) Default value:1')
 
 	Args = Parser.parse_args()
 	test_video = Args.test_video
@@ -380,11 +426,12 @@ def main():
 	elif test_video == 2:
 		rel_path = "Bolt2/img"
 		T_bb = [75, 269, 139, 303]
+		# T_bb = [80, 269, 123, 303]
 	elif test_video == 3:
 		rel_path = "DragonBaby/img"
 		T_bb = [83, 160, 148, 216]
 	else:
-		print("Input should be between 1-3. Can you count??")
+		print("Input should be between 1-3.")
 		exit()
 
 	cur_path = os.path.dirname(os.path.abspath(__file__))
@@ -411,7 +458,7 @@ def main():
 
 		T = images[0]
 
-		count = 0
+		count = 1
 		if not os.path.exists('Output_dragon'):
 			os.makedirs('Output_dragon')
 
@@ -441,11 +488,12 @@ def main():
 
 
 	if test_video ==1:
+		T = images[0]
 
 		p = np.asarray([0, 0, 0, 0, 0, 0])
 		p = np.reshape(p, (6,1))
 		bb = T_bb
-		count ==0
+		count = 1
 		if not os.path.exists('Output_car'):
 			os.makedirs('Output_car')
 		# if os.path.exists("p_values.txt"):
@@ -458,7 +506,7 @@ def main():
 			# np.savetxt(f, p , fmt="%s", newline=' ')
 			# f.write("\n")
 			print("norm of p",np.linalg.norm(p))
-			bb, p = track_obj(images[i], T, T_bb, p, i+1, bb)
+			bb, p = track_obj_car(images[i], T, T_bb, p, i+1, bb)
 			img = cv2.rectangle(images[i], (bb[1], bb[0]), (bb[3], bb[2]), color=(255,0,0), thickness=2)
 			
 			cv2.imwrite('Output_car/frame%03d.png' % count, img)
@@ -470,8 +518,31 @@ def main():
 		vid_path= "./CarResult.mp4"
 		generate_video(gt_path,test_video, output_path, vid_path)
 
+	if test_video == 2:
+		T = images[0]
 
+		p = np.asarray([0, 0, 0, 0, 0, 0])
+		p = np.reshape(p, (6,1))
+		
+		bb = T_bb
+		count = 1
+		
+		if not os.path.exists('Output_bolt'):
+			os.makedirs('Output_bolt')
 
+		for i in range(len(images)):
+			# print("norm of p",np.linalg.norm(p))
+			bb, p = track_obj(images[i], T, T_bb, p, i+1, bb)
+			img = cv2.rectangle(images[i], (bb[1], bb[0]), (bb[3], bb[2]), color=(255,0,0), thickness=2)
+			
+			cv2.imwrite('Output_bolt/frame%03d.png' % count, img)
+			count = count + 1
+
+			print("```````````````````````````````````````", str(i+1))
+
+		output_path =  "Output_bolt/"
+		vid_path= "./BoltResult.mp4"
+		generate_video(gt_path,test_video, output_path, vid_path)
 
 if __name__ == "__main__":
 	main()
