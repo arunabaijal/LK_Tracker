@@ -6,10 +6,11 @@ import numpy as np
 from copy import deepcopy
 import sys
 
+
 def shift_data(tmp_mean, img):
 	tmp_mean_matrix = np.full((img.shape), tmp_mean)
-	print(tmp_mean)
-	print(find_avg_brightness(img))
+	# print(tmp_mean)
+	# print(find_avg_brightness(img))
 	img_mean_matrix = np.full((img.shape), find_avg_brightness(img))
 	std_ = np.std(img)
 	z_score = np.true_divide((img.astype(int) - tmp_mean_matrix.astype(int)), std_)
@@ -34,7 +35,7 @@ def display_groundtruth(images, gt_path, test_video):
 		else:
 			bb = bb.split(',')
 		bb = np.asarray(bb, dtype=int)
-		im = cv2.rectangle(im, (bb[0], bb[1]), (bb[2]+bb[0], bb[3]+bb[1]), color=(255,0,0), thickness=2)
+		im = cv2.rectangle(im, (bb[0], bb[1]), (bb[2]+bb[0], bb[3]+bb[1]), color=(0,0,255), thickness=2)
 		result.append(im)
 
 	result = np.asarray(result)
@@ -67,14 +68,6 @@ def traks_obj_util(img, T, p, bb):
 	W = cv2.invertAffineTransform(W)
 
 	I = cv2.warpAffine(img, W, (img.shape[1], img.shape[0]))
-	
-	# cv2.imshow("warped", im)
-	# cv2.waitKey(0)
-	# if cv2.waitKey(0) & 0xff == 27:
-	# 	cv2.destroyAllWindows()
-	# cv2.imshow("template", T)
-	# if cv2.waitKey(0) & 0xff == 27:
-	# 	cv2.destroyAllWindows()
 
 	grad_x = cv2.Sobel(img, cv2.CV_32F, 1, 0, ksize=3)
 	grad_y = cv2.Sobel(img, cv2.CV_32F, 0, 1, ksize=3)
@@ -82,48 +75,47 @@ def traks_obj_util(img, T, p, bb):
 	grad_x = cv2.warpAffine(grad_x, W, (grad_x.shape[1], grad_x.shape[0]))
 	grad_y = cv2.warpAffine(grad_y, W, (grad_y.shape[1], grad_y.shape[0]))
 
+
 	H = np.zeros((6,6))
+	temp = np.zeros((6,1))
+
+	error = T - I
+	err = np.reshape(error,(-1,1))
+	sigma = np.std(err)
+
+
 	for y in range(bb[0], bb[2], 1):
 		for x in range(bb[1], bb[3], 1):
 			del_W = np.asarray([[x, 0, y, 0, 1, 0],
 							    [0, x, 0, y, 0, 1]])
 			grad = np.asarray([grad_x[y,x], grad_y[y,x]])
-			# grad = [grad_x[y,x], grad_y[y,x]]
-			# print(grad.shape)
-			# print(del_W.shape)
-
+		
 			sd = np.matmul(grad, del_W)
 			sd = np.reshape(sd, (1,6))
+
+			e = T[y, x] - I[y, x]
+
+			# t=e**2                                                  #Implementation of huber function
+
+			# if 0<= t and t <= sigma**2:                             
+			# 	rho = 0.5*t
+
+			# elif t>sigma**2: 
+			# 	rho = sigma*math.sqrt(t) - 0.5*(sigma**2)
+		
+			# H_ = rho*np.matmul(sd.transpose(), sd)
+			# temp =  temp + rho*sd.transpose()*e
 			H_ = np.matmul(sd.transpose(), sd)
+			temp =  temp + sd.transpose()*e
 			H = H + H_
 
 	H_inv = np.linalg.inv(H) 
-
-	temp = np.zeros((6,1))
-	for y in range(bb[0], bb[2], 1):
-		for x in range(bb[1], bb[3], 1):
-			del_W = np.asarray([[x, 0, y, 0, 1, 0],
-							    [0, x, 0, y, 0, 1]])
-			# grad = [grad_x[y,x], grad_y[y,x]]
-			grad = np.asarray([grad_x[y,x], grad_y[y,x]])
-
-			sd = np.matmul(grad, del_W)
-			sd = np.reshape(sd, (1,6)).T
-
-			e = T[y, x] - I[y, x]
-			# e = I[y, x] - T[y, x]
-			temp = temp + e*sd
-
 	delta_p = np.matmul(H_inv, temp)
 
 	e = 0
 	for y in range(bb[0], bb[2], 1):
 		for x in range(bb[1], bb[3], 1):
-			# e = e + T[y, x] - I[y, x]
 			e = e + (I[y, x] - T[y, x])**2
-
-	# print("e: ", math.sqrt(e))
-	# print("delta_p: ", delta_p)
 
 	return delta_p, I, math.sqrt(e)
 
@@ -290,7 +282,7 @@ def track_obj_dragon(img, T_front, T_bb_front, T_side, T_bb_side, T_back, T_bb_b
 	# if cv2.waitKey(0) & 0xff == 27:
 	# 	cv2.destroyAllWindows()
 	
-	cv2.imwrite('Warped_dragon/frame' + str(cnt) + '.png', I)
+	# cv2.imwrite('Warped_dragon/frame' + str(cnt) + '.png', I)
 	
 	# print(np.linalg.norm(delta_p))
 	# print("e: ", e)
@@ -308,66 +300,42 @@ def track_obj_dragon(img, T_front, T_bb_front, T_side, T_bb_side, T_back, T_bb_b
 	return np.asarray([int(y1), int(x1), int(y2), int(x2)]), p_front, p_side, p_back
 
 
-def track_obj(img, T, T_bb, p, cnt, bb, temp_avg):
-	# img_hist = cv2.cvtColor(img_hist, cv2.COLOR_BGR2GRAY)
-	# img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-	# T = cv2.cvtColor(T, cv2.COLOR_BGR2GRAY)
-	# img_hist = deepcopy(img)
+def track_obj_car(img, T, T_bb, p, cnt, bb):
+	img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+	T = cv2.cvtColor(T, cv2.COLOR_BGR2GRAY)
+	# img_hist = deepcopy(img)                                               # Implementation of Histogram equilization
 	# img_hist = np.asarray(img_hist, dtype='uint8')
-	# crop_img = img_hist[bb[0]-10:bb[2]+10, bb[1]-10:bb[3]+10, :]
-	# img_hist = shift_data(temp_avg, crop_img)
+	# crop_img = img_hist[bb[0]-10:bb[2]+10, bb[1]-10:bb[3]+10]
 	# img_hist = cv2.equalizeHist(crop_img)
-	# cv2.imshow("cropped histogram", img_hist)
-	# cv2.waitKey(0)
-	# for i in range(bb[0],bb[2]):
-	# 	for j in range(bb[1],bb[3]):
-	# 		img[i][j] = img_hist[i][j]
-	# img[bb[0]-10:bb[2]+10, bb[1]-10:bb[3]+10, :] = img_hist
-	# cv2.imshow("full image histogram", img)
-	# cv2.waitKey(0)
+
+	# img[bb[0]-10:bb[2]+10, bb[1]-10:bb[3]+10] = img_hist
+
 	img = np.asarray(img, dtype='float32')
 	T = np.asarray(T, dtype='float32')
 	count = 0
 	p_orig = p
 
-	while count < 200:
+	while count < 500:
 		# img_copy = deepcopy(img)
 		delta_p, I, e = traks_obj_util(img, T, p, T_bb)
 		p = p + delta_p
 		count = count + 1
-		if np.linalg.norm(delta_p) < 0.01:
+		if np.linalg.norm(delta_p) < 0.001:
 			print('Found at ', count)
 			break
-	if count == 200:
+		if np.linalg.norm(p) >= 185:
+			p = p_orig
+			break
+	if count == 500:
 		print("Oh no!! Couldn't track object!!!! Tragedy!!!!!!")
 		p = p_orig
-		# W_inv1 = get_Winv(p)
-		# print(W_inv1)
-		# W = get_W(p)
-		# W_inv = cv2.invertAffineTransform(W)
-		# # print(W_inv)
 
-		# T1 = np.asarray([T_bb[1], T_bb[0], 1])
-		# T2 = np.asarray([T_bb[3], T_bb[2], 1])
+	# cv2.imwrite('Warped_car/frame' + str(cnt) + '.png', I)
 
-		# x1, y1 = np.matmul(W_inv, np.reshape(T1, (3,1)))
-		# x2, y2 = np.matmul(W_inv, np.reshape(T2, (3,1)))
-
-		# print(x1, y1, x2, y2)
-
-		# im = cv2.rectangle(img_copy, (x1, y1), (x2, y2), color=(255,0,0), thickness=2)
-		# cv2.imshow("image", img_copy)
-		# if cv2.waitKey(0) & 0xff == 27:
-		# 	cv2.destroyAllWindows()
-
-	cv2.imwrite('Warped_dragon_3/frame' + str(cnt) + '.png', I)
-
-	print(np.linalg.norm(delta_p))
+	print("norm of delta p", np.linalg.norm(delta_p))
 	print("e: ", e)
 	W_inv = get_W(p)
 	
-
-	# bb = np.zeros((1, 4))
 	T1 = np.asarray([T_bb[1], T_bb[0], 1])
 	T2 = np.asarray([T_bb[3], T_bb[2], 1])
 
@@ -375,6 +343,29 @@ def track_obj(img, T, T_bb, p, cnt, bb, temp_avg):
 	x2, y2 = np.matmul(W_inv, np.reshape(T2, (3,1)))
 	return np.asarray([int(y1), int(x1), int(y2), int(x2)]), p
 
+def generate_video(gt_path,test_video,output_path,vid_path):
+	cur_path = os.path.dirname(os.path.abspath(__file__))
+	img_path = os.path.join(cur_path,output_path )
+	images = []
+	
+	for name in sorted(os.listdir(img_path)):
+		# print(name)
+		im = cv2.imread(os.path.join(img_path, name))
+		images.append(im)
+
+	images = np.asarray(images)
+
+	res = display_groundtruth(images, gt_path, test_video)
+
+	vidWriter = cv2.VideoWriter(vid_path, cv2.VideoWriter_fourcc(*'mp4v'), 15, (res[0].shape[1], res[0].shape[0]))
+	# count = 1
+	for img in res:
+		vidWriter.write(img)
+		# print(count)
+		# count= count+1
+		# if count ==5:
+		# 	break
+	vidWriter.release()
 
 def main():
 	Parser = argparse.ArgumentParser()
@@ -408,48 +399,76 @@ def main():
 
 	images = np.asarray(images)
 	
-	# print(len(images))
-	# imgs = np.asarray([images[1], images[11], images[28]])
+	if test_video ==3:
 
-	# T = images[0][51:138, 70:177, :]
-	# cv2.imshow("template", T)
-	# if cv2.waitKey(0) & 0xff == 27:
-	# 	cv2.destroyAllWindows()
-	T_front = images[0]
-	T_bb_front = [83, 160, 148, 216]
-	T_side = images[10]
-	T_bb_side = [59, 145, 130, 210]
-	T_back = images[27]
-	T_bb_back = [80, 190, 145, 255]
+		T_front = images[0]
+		T_bb_front = [83, 160, 148, 216]
+		T_side = images[10]
+		T_bb_side = [59, 145, 130, 210]
+		T_back = images[27]
+		T_bb_back = [80, 190, 145, 255]
 
-	count = 0
 
-	# initialize P
-	p_front = np.asarray([0, 0, 0, 0, 0, 0])
-	p_front = np.reshape(p_front, (6,1))
-	p_side = np.asarray([0, 0, 0, 0, 0, 0])
-	p_side = np.reshape(p_side, (6,1))
-	p_back = np.asarray([0, 0, 0, 0, 0, 0])
-	p_back = np.reshape(p_back, (6,1))
-	count = 81
-	bb = T_bb_front
-	# temp_avg = find_avg_brightness(T[T_bb[0] - 10:T_bb[2] + 10, T_bb[1] - 10:T_bb[3] + 10, :])
-	for i in range(80, len(images)):
-		# if count == 0:
-		# 	count = count + 1
-		# 	continue
-		img = deepcopy(images[i])
-		bb, p_front, p_side, p_back = track_obj_dragon(images[i], T_front, T_bb_front, T_side, T_bb_side, T_back, T_bb_back, p_front, p_side, p_back, count, bb)
-		img = cv2.rectangle(img, (bb[1], bb[0]), (bb[3], bb[2]), color=(255,0,0), thickness=2)
-		cv2.imwrite('Output_dragon_3/frame%03d.png' % count, img)
-		count = count + 1
+		T = images[0]
 
-	# res = display_groundtruth(images, gt_path, test_video)
+		count = 0
+		if not os.path.exists('Output_dragon'):
+			os.makedirs('Output_dragon')
 
-	# for im in res:
-	# 	cv2.imshow('video', im)
-	# 	if cv2.waitKey(0) & 0xff == 27:
-	# 		cv2.destroyAllWindows()
+		# initialize P
+		p_front = np.asarray([0, 0, 0, 0, 0, 0])
+		p_front = np.reshape(p_front, (6,1))
+		p_side = np.asarray([0, 0, 0, 0, 0, 0])
+		p_side = np.reshape(p_side, (6,1))
+		p_back = np.asarray([0, 0, 0, 0, 0, 0])
+		p_back = np.reshape(p_back, (6,1))
+		bb = T_bb_front
+		# temp_avg = find_avg_brightness(T[T_bb[0] - 10:T_bb[2] + 10, T_bb[1] - 10:T_bb[3] + 10, :])
+		for i in range(len(images)):
+			# if count == 0:
+			# 	count = count + 1
+			# 	continue
+			img = deepcopy(images[i])
+			bb, p_front, p_side, p_back = track_obj_dragon(images[i], T_front, T_bb_front, T_side, T_bb_side, T_back, T_bb_back, p_front, p_side, p_back, count, bb)
+			img = cv2.rectangle(img, (bb[1], bb[0]), (bb[3], bb[2]), color=(255,0,0), thickness=2)
+
+			cv2.imwrite('Output_dragon/frame%03d.png' % count, img)
+			count = count + 1
+
+		output_path =  "Output_dragon/"
+		vid_path= "./DragonBabyResult.mp4"
+		generate_video(gt_path,test_video, output_path, vid_path)
+
+
+	if test_video ==1:
+
+		p = np.asarray([0, 0, 0, 0, 0, 0])
+		p = np.reshape(p, (6,1))
+		bb = T_bb
+		count ==0
+		if not os.path.exists('Output_car'):
+			os.makedirs('Output_car')
+		# if os.path.exists("p_values.txt"):
+		# 	os.remove("p_values.txt")
+		# 	f = open("p_values.txt", "a")
+		for i in range(len(images)):
+			# if count == 0:
+			# 	count = count + 1
+			# 	continue
+			# np.savetxt(f, p , fmt="%s", newline=' ')
+			# f.write("\n")
+			print("norm of p",np.linalg.norm(p))
+			bb, p = track_obj(images[i], T, T_bb, p, i+1, bb)
+			img = cv2.rectangle(images[i], (bb[1], bb[0]), (bb[3], bb[2]), color=(255,0,0), thickness=2)
+			
+			cv2.imwrite('Output_car/frame%03d.png' % count, img)
+			count = count + 1
+
+			print("```````````````````````````````````````", str(i+1))
+
+		output_path =  "Output_car/"
+		vid_path= "./CarResult.mp4"
+		generate_video(gt_path,test_video, output_path, vid_path)
 
 
 
