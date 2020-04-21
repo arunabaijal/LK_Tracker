@@ -131,6 +131,10 @@ def find_avg_brightness(img):
 
 
 def track_obj_dragon(img, T_front, T_bb_front, T_side, T_bb_side, T_back, T_bb_back, p_front, p_side, p_back, cnt, bb):
+	img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+	T_front = cv2.cvtColor(T_front, cv2.COLOR_BGR2GRAY)
+	T_back = cv2.cvtColor(T_back, cv2.COLOR_BGR2GRAY)
+	T_side = cv2.cvtColor(T_side, cv2.COLOR_BGR2GRAY)
 	img = np.asarray(img, dtype='float32')
 	T_front = np.asarray(T_front, dtype='float32')
 	T_side = np.asarray(T_side, dtype='float32')
@@ -478,9 +482,6 @@ def main():
 		T_bb_side = [59, 145, 130, 210]
 		T_back = images[27]
 		T_bb_back = [80, 190, 145, 255]
-
-
-		T = images[0]
 
 		count = 1
 		if not os.path.exists('Output_dragon'):
