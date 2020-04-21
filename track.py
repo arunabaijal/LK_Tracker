@@ -4,7 +4,24 @@ import math
 import argparse
 import numpy as np
 from copy import deepcopy
-import matplotlib.pyplot as plt
+import sys
+
+def shift_data(tmp_mean, img):
+	tmp_mean_matrix = np.full((img.shape), tmp_mean)
+	print(tmp_mean)
+	print(find_avg_brightness(img))
+	img_mean_matrix = np.full((img.shape), find_avg_brightness(img))
+	std_ = np.std(img)
+	z_score = np.true_divide((img.astype(int) - tmp_mean_matrix.astype(int)), std_)
+	dmean = np.mean(img) - tmp_mean
+	
+	if dmean < 10:
+		shifted_img = -(z_score * std_).astype(int) + img_mean_matrix.astype(int)
+	
+	else:
+		shifted_img = (z_score * std_).astype(int) + img_mean_matrix.astype(int)
+	
+	return shifted_img.astype(dtype=np.uint8)
 
 def display_groundtruth(images, gt_path, test_video):
 	f = open(gt_path, "r")
@@ -45,8 +62,8 @@ def get_Winv(p):
 
 def traks_obj_util(img, T, p, bb):
 	W = get_W(p)
-	# img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-	# T = cv2.cvtColor(T, cv2.COLOR_BGR2GRAY)
+	img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+	T = cv2.cvtColor(T, cv2.COLOR_BGR2GRAY)
 	W = cv2.invertAffineTransform(W)
 
 	I = cv2.warpAffine(img, W, (img.shape[1], img.shape[0]))
@@ -110,20 +127,202 @@ def traks_obj_util(img, T, p, bb):
 
 	return delta_p, I, math.sqrt(e)
 
-def track_obj(img, T, T_bb, p, cnt, bb):
+def find_avg_brightness(img):
+	img_brightness = []
+	for i in range(img.shape[0]):
+		for j in range(img.shape[1]):
+			img_brightness.append(0.2126*img[i][j][2] + 0.7152 * img[i][j][1] + 0.0722 * img[i][j][0])
+	return np.mean(img_brightness)
+
+
+def track_obj_dragon(img, T_front, T_bb_front, T_side, T_bb_side, T_back, T_bb_back, p_front, p_side, p_back, cnt, bb):
+	img = np.asarray(img, dtype='float32')
+	T_front = np.asarray(T_front, dtype='float32')
+	T_side = np.asarray(T_side, dtype='float32')
+	T_back = np.asarray(T_back, dtype='float32')
+	count = 0
+	p_orig_front = p_front
+	p_orig_side = p_side
+	p_orig_back = p_back
+	p_front = np.asarray([0, 0, 0, 0, 0, 0])
+	p_front = np.reshape(p_front, (6, 1))
+	p_side = np.asarray([0, 0, 0, 0, 0, 0])
+	p_side = np.reshape(p_side, (6, 1))
+	p_back = np.asarray([0, 0, 0, 0, 0, 0])
+	p_back = np.reshape(p_back, (6, 1))
+	found = True
+	front_p = 0
+	front_dp = 0
+	front_I = 0
+	side_p = 0
+	side_dp = 0
+	side_I = 0
+	back_p = 0
+	back_dp = 0
+	back_I = 0
+	min_error_front = sys.maxsize
+	min_error_side = sys.maxsize
+	min_error_back = sys.maxsize
+	print("Check for Front")
+	while count < 300:
+		delta_p, I, e = traks_obj_util(img, T_front, p_front, T_bb_front)
+		p_front = p_front + delta_p
+		count = count + 1
+		if e < min_error_front:
+			min_error_front = e
+			front_dp = delta_p
+			front_p = p_front
+			front_I = I
+		# if e < 2500:
+		# 	print('Found front at ', count)
+		# 	T1 = np.asarray([T_bb_front[1], T_bb_front[0], 1])
+		# 	T2 = np.asarray([T_bb_front[3], T_bb_front[2], 1])
+		# 	break
+	# if count == 500:
+	print("front e ", min_error_front)
+	count = 0
+	print("Check for Side")
+	# p = p_orig_side
+	while count < 300:
+		delta_p, I, e = traks_obj_util(img, T_side, p_side, T_bb_side)
+		p_side = p_side + delta_p
+		count = count + 1
+		if e < min_error_side:
+			min_error_side = e
+			side_dp = delta_p
+			side_I = I
+			side_p = p_side
+			# print('Found side at ', count)
+			# T1 = np.asarray([T_bb_side[1], T_bb_side[0], 1])
+			# T2 = np.asarray([T_bb_side[3], T_bb_side[2], 1])
+			# break
+	# if count == 500:
+	print("side e ", min_error_side)
+	
+	count = 0
+	print("Check for Back")
+	# p = p_orig_side
+	while count < 300:
+		delta_p, I, e = traks_obj_util(img, T_back, p_back, T_bb_back)
+		p_back = p_back + delta_p
+		count = count + 1
+		if e < min_error_back:
+			min_error_back = e
+			back_dp = delta_p
+			back_I = I
+			back_p = p_back
+	print("back e ", min_error_back)
+	# count = 0
+	# print("Check for Back")
+	# p = p_orig
+	# while count < 300:
+	# 	delta_p, I, e = traks_obj_util(img, T_back, p, T_bb_back)
+	# 	p = p + delta_p
+	# 	count = count + 1
+	# 	if e < min_error_back:
+	# 		min_error_back = e
+	# 		back_dp = delta_p
+	# 		back_I = I
+	# 		back_p = p
+	# 		# print('Found back at ', count)
+	# 		# T1 = np.asarray([T_bb_back[1], T_bb_back[0], 1])
+	# 		# T2 = np.asarray([T_bb_back[3], T_bb_back[2], 1])
+	# 		# break
+	# print("back e ", min_error_back)
+	if min_error_front < min_error_side and min_error_front < min_error_back:
+		delta_p = front_dp
+		I = front_I
+		p = front_p
+		T1 = np.asarray([T_bb_front[1], T_bb_front[0], 1])
+		T2 = np.asarray([T_bb_front[3], T_bb_front[2], 1])
+		e = min_error_front
+		p_side = p_orig_side
+		p_back = p_orig_back
+		print("Front selected")
+		
+	elif min_error_side < min_error_front and min_error_side < min_error_back:
+		delta_p = side_dp
+		I = side_I
+		p = side_p
+		T1 = np.asarray([T_bb_side[1], T_bb_side[0], 1])
+		T2 = np.asarray([T_bb_side[3], T_bb_side[2], 1])
+		e = min_error_side
+		p_front = p_orig_front
+		p_back = p_orig_back
+		print("Side selected")
+		
+	else:
+		delta_p = back_dp
+		I = back_I
+		p = back_p
+		T1 = np.asarray([T_bb_back[1], T_bb_back[0], 1])
+		T2 = np.asarray([T_bb_back[3], T_bb_back[2], 1])
+		e = min_error_back
+		p_side = p_orig_side
+		p_front = p_orig_front
+		print("Back selected")
+	
+	if e > 3000:
+		print("Oh no, couldn't track!")
+		if min_error_front < min_error_side and min_error_front < min_error_back:
+			p = p_orig_front
+		elif min_error_side < min_error_back and min_error_side < min_error_front:
+			p = p_orig_side
+		else:
+			p = p_orig_back
+		found = False
+	# W_inv1 = get_Winv(p)
+	# print(W_inv1)
+	# W = get_W(p)
+	# W_inv = cv2.invertAffineTransform(W)
+	# # print(W_inv)
+	
+	# T1 = np.asarray([T_bb[1], T_bb[0], 1])
+	# T2 = np.asarray([T_bb[3], T_bb[2], 1])
+	
+	# x1, y1 = np.matmul(W_inv, np.reshape(T1, (3,1)))
+	# x2, y2 = np.matmul(W_inv, np.reshape(T2, (3,1)))
+	
+	# print(x1, y1, x2, y2)
+	
+	# im = cv2.rectangle(img_copy, (x1, y1), (x2, y2), color=(255,0,0), thickness=2)
+	# cv2.imshow("image", img_copy)
+	# if cv2.waitKey(0) & 0xff == 27:
+	# 	cv2.destroyAllWindows()
+	
+	cv2.imwrite('Warped_dragon/frame' + str(cnt) + '.png', I)
+	
+	# print(np.linalg.norm(delta_p))
+	# print("e: ", e)
+	W_inv = get_W(p)
+	if found:
+		x1, y1 = np.matmul(W_inv, np.reshape(T1, (3, 1)))
+		x2, y2 = np.matmul(W_inv, np.reshape(T2, (3, 1)))
+	else:
+		y1 = bb[0]
+		x1 = bb[1]
+		y2 = bb[2]
+		x2 = bb[3]
+	# bb = np.zeros((1, 4))
+	
+	return np.asarray([int(y1), int(x1), int(y2), int(x2)]), p_front, p_side, p_back
+
+
+def track_obj(img, T, T_bb, p, cnt, bb, temp_avg):
 	# img_hist = cv2.cvtColor(img_hist, cv2.COLOR_BGR2GRAY)
-	img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-	T = cv2.cvtColor(T, cv2.COLOR_BGR2GRAY)
-	img_hist = deepcopy(img)
-	img_hist = np.asarray(img_hist, dtype='uint8')
-	crop_img = img_hist[bb[0]-10:bb[2]+10, bb[1]-10:bb[3]+10]
-	img_hist = cv2.equalizeHist(crop_img)
+	# img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+	# T = cv2.cvtColor(T, cv2.COLOR_BGR2GRAY)
+	# img_hist = deepcopy(img)
+	# img_hist = np.asarray(img_hist, dtype='uint8')
+	# crop_img = img_hist[bb[0]-10:bb[2]+10, bb[1]-10:bb[3]+10, :]
+	# img_hist = shift_data(temp_avg, crop_img)
+	# img_hist = cv2.equalizeHist(crop_img)
 	# cv2.imshow("cropped histogram", img_hist)
 	# cv2.waitKey(0)
 	# for i in range(bb[0],bb[2]):
 	# 	for j in range(bb[1],bb[3]):
 	# 		img[i][j] = img_hist[i][j]
-	img[bb[0]-10:bb[2]+10, bb[1]-10:bb[3]+10] = img_hist
+	# img[bb[0]-10:bb[2]+10, bb[1]-10:bb[3]+10, :] = img_hist
 	# cv2.imshow("full image histogram", img)
 	# cv2.waitKey(0)
 	img = np.asarray(img, dtype='float32')
@@ -131,7 +330,7 @@ def track_obj(img, T, T_bb, p, cnt, bb):
 	count = 0
 	p_orig = p
 
-	while count < 500:
+	while count < 200:
 		# img_copy = deepcopy(img)
 		delta_p, I, e = traks_obj_util(img, T, p, T_bb)
 		p = p + delta_p
@@ -139,7 +338,7 @@ def track_obj(img, T, T_bb, p, cnt, bb):
 		if np.linalg.norm(delta_p) < 0.01:
 			print('Found at ', count)
 			break
-	if count == 500:
+	if count == 200:
 		print("Oh no!! Couldn't track object!!!! Tragedy!!!!!!")
 		p = p_orig
 		# W_inv1 = get_Winv(p)
@@ -161,7 +360,7 @@ def track_obj(img, T, T_bb, p, cnt, bb):
 		# if cv2.waitKey(0) & 0xff == 27:
 		# 	cv2.destroyAllWindows()
 
-	cv2.imwrite('Warped_bolt/frame' + str(cnt) + '.png', I)
+	cv2.imwrite('Warped_dragon_3/frame' + str(cnt) + '.png', I)
 
 	print(np.linalg.norm(delta_p))
 	print("e: ", e)
@@ -179,7 +378,7 @@ def track_obj(img, T, T_bb, p, cnt, bb):
 
 def main():
 	Parser = argparse.ArgumentParser()
-	Parser.add_argument('--test_video', type=int, default = 1, help = 'Choose the inut test video. (1: Car4, 2: Bolt2, 3: DragonBaby) Default value:1')
+	Parser.add_argument('--test_video', type=int, default = 3, help = 'Choose the inut test video. (1: Car4, 2: Bolt2, 3: DragonBaby) Default value:1')
 
 	Args = Parser.parse_args()
 	test_video = Args.test_video
@@ -210,30 +409,40 @@ def main():
 	images = np.asarray(images)
 	
 	# print(len(images))
+	# imgs = np.asarray([images[1], images[11], images[28]])
 
 	# T = images[0][51:138, 70:177, :]
 	# cv2.imshow("template", T)
 	# if cv2.waitKey(0) & 0xff == 27:
 	# 	cv2.destroyAllWindows()
-	T = images[0]
-	# T_bb = [61, 104, 125, 186]
+	T_front = images[0]
+	T_bb_front = [83, 160, 148, 216]
+	T_side = images[10]
+	T_bb_side = [59, 145, 130, 210]
+	T_back = images[27]
+	T_bb_back = [80, 190, 145, 255]
 
 	count = 0
 
 	# initialize P
-	p = np.asarray([0, 0, 0, 0, 0, 0])
-	p = np.reshape(p, (6,1))
-	bb = T_bb
-	for i in range(len(images)):
+	p_front = np.asarray([0, 0, 0, 0, 0, 0])
+	p_front = np.reshape(p_front, (6,1))
+	p_side = np.asarray([0, 0, 0, 0, 0, 0])
+	p_side = np.reshape(p_side, (6,1))
+	p_back = np.asarray([0, 0, 0, 0, 0, 0])
+	p_back = np.reshape(p_back, (6,1))
+	count = 81
+	bb = T_bb_front
+	# temp_avg = find_avg_brightness(T[T_bb[0] - 10:T_bb[2] + 10, T_bb[1] - 10:T_bb[3] + 10, :])
+	for i in range(80, len(images)):
 		# if count == 0:
 		# 	count = count + 1
 		# 	continue
-		bb, p = track_obj(images[i], T, T_bb, p, i+1, bb)
-		im = cv2.rectangle(images[i], (bb[1], bb[0]), (bb[3], bb[2]), color=(255,0,0), thickness=2)
-		cv2.imwrite('Output_bolt/frame' + str(i+1) + '.png', im)
-		# count = count + 1
-		# if count == 5:
-			# break
+		img = deepcopy(images[i])
+		bb, p_front, p_side, p_back = track_obj_dragon(images[i], T_front, T_bb_front, T_side, T_bb_side, T_back, T_bb_back, p_front, p_side, p_back, count, bb)
+		img = cv2.rectangle(img, (bb[1], bb[0]), (bb[3], bb[2]), color=(255,0,0), thickness=2)
+		cv2.imwrite('Output_dragon_3/frame%03d.png' % count, img)
+		count = count + 1
 
 	# res = display_groundtruth(images, gt_path, test_video)
 
