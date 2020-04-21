@@ -13,5 +13,5 @@ python3 track.py --test_video 1
 
 For car dataset, give test_video argument as 1. For bolt dataset, give test_video argument as 2. For DragonBaby dataset, give test_video argument as 3. The default value is 1. 
 
-While program is executing, you can see the output frames in `Output_car or Output_bolt or Output_dragon`. 
-After program execution, the resultant video will be saved as `CarResult.mp4 or BoltResult.mp4 or DragonBabyResult.mp4`.
+While program is executing, you can see the output frames in `Output_car/Output_bolt/Output_dragon`. 
+After program execution, the resultant video will be saved as `CarResult.mp4/BoltResult.mp4/DragonBabyResult.mp4`.
